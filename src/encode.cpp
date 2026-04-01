@@ -20,7 +20,7 @@ CipherText encode(
   int i=0;
   // populate message polynomial... may want to add check that b.size()<n
   for(auto& bit : msg){
-    if(bit=='1')m[i]=(q/2)+1;
+    if(bit)m[i]=q/2;
     ++i;
   }
   double sigma = compute_sigma(n, q);
@@ -48,8 +48,8 @@ CipherText encode(
 Polynomial filter_noise(const Polynomial& m, Modulus q) {
   Polynomial clean(m.size(), 0);
   for (size_t i = 0; i < m.size(); ++i) {
-    Modulus noisy = m[i] % q;
-    clean[i] = (noisy >= q/4 && noisy <= 3*q/4) ? 1 : 0;
+    Modulus v = ((m[i] % q) + q) % q;
+    clean[i] = (std::abs(v - q/2) < std::abs(v - 0) && std::abs(v - q/2) < std::abs(v - q)) ? 1 : 0;
   }
   return clean;
 }
@@ -62,9 +62,8 @@ Polynomial decode(const Key& s, const CipherText& c, Dimension n, Modulus q){
 
   c1 = std::get<0>(c);
   c2 = std::get<1>(c);
-  c1 = multiply_poly(c1, s, q);
-  m = subtract_poly(c2, c1, q);
-  m = cyclic_mod(m,n,q);
+  c1 = cyclic_mod(multiply_poly(c1, s, q), n, q);
+  m = cyclic_mod(subtract_poly(c2, c1, q), n, q);
   m = filter_noise(m, q);
   return m;
 }

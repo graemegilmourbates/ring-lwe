@@ -54,6 +54,6 @@ Polynomial sample_ternary(Dimension n){
 }
 
 double compute_sigma(Dimension n, Modulus q, double bound, double margin){
-    //return q / (tail_bound * noise_margin * std::sqrt(n));
-    return std::sqrt(q)/2;
+    (void)n; (void)q; (void)bound; (void)margin;
+    return 3.2;
 }
