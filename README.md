@@ -1,158 +1,99 @@
-# Learning With Errors
+# Ring-LWE
 
-**Author:** Graeme Bates
+A C++ implementation of the Ring Learning With Errors (Ring-LWE) encryption scheme — a post-quantum public key cryptosystem based on hard lattice problems.
 
-## Abstract
-
-The goal of this paper is to give readers an intuitive understanding of the Learning With Errors problem (LWE). This paper gives a high-level overview of LWE and the associated hard lattice problems. Although it includes a simple implementation of the Ring-Learning With Errors (Ring-LWE) problem in C++, it is not intended as a comprehensive guide for building secure cryptosystems. Practical system design requires thoughtful choices of error magnitude, sampling distributions, modulus size, and error correction methods — especially when supporting features like Fully Homomorphic Encryption (FHE).
+> **Note:** This is an educational implementation. It is not hardened for production use. See the accompanying [writeup](LWE.pdf) for background on the theory.
 
 ---
 
-## Introduction
+## Overview
 
-The **Learning With Errors** (LWE) problem is a modern cryptographic protocol in lattice-based cryptography. Proposed in 2005 by Oded Regev, LWE and its variants (like Ring-LWE) are the foundation for public key cryptographic schemes believed to be secure against quantum attacks.
+Ring-LWE is a variant of the Learning With Errors problem that operates over the polynomial ring `ℤ_q[x] / (xⁿ + 1)`. It achieves the security of lattice-based cryptography with the efficiency of polynomial arithmetic, and underlies NIST post-quantum standards like Kyber.
+
+This implementation supports:
+- Key generation (private and public)
+- Bit-vector encryption and decryption
+- Basic homomorphic operations
+
+Default parameters: `n = 256`, `q = 7681`.
 
 ---
 
-## Motivation
-
-LWE was developed in response to the threat posed by quantum computers, which can break RSA and discrete log-based systems using Shor's algorithm. In contrast, LWE offers **quantum-safe security**.
-
-Another key feature of LWE-based schemes is support for **Fully Homomorphic Encryption (FHE)**, which enables computation on encrypted data. While powerful, FHE is challenged by ciphertext expansion and error growth — prompting techniques like *bootstrapping* to mitigate these issues.
-
----
-
-## Lattice Preliminaries
-
-### Lattices
-
-A lattice `L` is a set of all integer linear combinations of a basis:
+## Structure
 
 ```
-L = { sum(k_i * b_i) : k_i ∈ ℤ,  i = 1..n }
+ring-lwe/
+├── include/
+│   ├── poly.h          # Polynomial type and arithmetic mod q
+│   ├── keygen.h        # Private and public key generation
+│   ├── encode.h        # Encryption / decryption
+│   ├── homomorphic.h   # Homomorphic operations on ciphertexts
+│   └── utils.h         # Sampling and utility functions
+├── src/                # Implementations
+├── main.cpp            # Demo: encrypt and decrypt a bit vector
+├── CMakeLists.txt
+└── Makefile
 ```
-
-Think of this as a regular grid of points formed by vectors in Euclidean space.
-
-### Basis and Complexity
-
-A "good" basis has short, nearly orthogonal vectors, making navigation easy. A "bad" basis (long, nearly parallel vectors) makes problems like the **Closest Vector Problem (CVP)** hard — especially in high dimensions.
-
-### Hard Lattice Problems
-
-**Closest Vector Problem (CVP):** Given a point in ℝⁿ, find the closest lattice point. With a bad basis, CVP is NP-hard.
-
-**Bounded Distance Decoding (BDD):** A restricted form of CVP where the target point is guaranteed to be close to the lattice. LWE is provably hard via reduction to BDD.
-
-### NTRU Cryptosystem
-
-NTRU is a public key cryptosystem built using polynomial rings. Ring-LWE adapts many of its ideas, combining efficiency with provable security. See [Appendix A](#appendix-a-ntru-protocol) for details.
 
 ---
 
-## Learning With Errors (LWE)
+## Build
 
-LWE is essentially the problem of solving noisy systems of linear equations mod `q`, where `q` is a large prime.
+**With Make:**
+```bash
+make
+./ring-lwe
+```
 
-### Key Generation
-
-- Choose a secret vector `s ∈ ℤ_q^n`
-- Choose a random matrix `A ∈ ℤ_q^(m×n)`
-- Sample a small noise vector `e ∈ ℤ^m`
-- Compute the public key: `y = A·s + e`
-
-| Key | Value |
-|-----|-------|
-| Public key | `(A, y)` |
-| Private key | `s` |
-
-### Encoding
-
-To send bit `p_i`:
-1. Randomly select and sum rows of `A` and the corresponding entries of `y`
-2. If `p_i = 0`, send the sum as-is
-3. If `p_i = 1`, add `⌊q/2⌉` to the result
-
-This hides the message within noisy sums.
-
-### Decoding
-
-Alice computes `w = B·s`, then derives `d_i = c_i - w_i mod q`:
-
-- If `d_i ≈ 0` → `p_i = 0`
-- If `d_i ≈ q/2` → `p_i = 1`
-
-The small noise guarantees reliable recovery.
-
-### Drawbacks
-
-- **Inefficient** for practical use — requires many operations
-- Stores `n + 1` integers per bit of plaintext
+**With CMake:**
+```bash
+mkdir build && cd build
+cmake ..
+make
+./ring-lwe
+```
 
 ---
 
-## Ring-LWE
+## Usage
 
-To improve efficiency, Ring-LWE operates over the polynomial ring `ℤ_q[x] / (x^n + 1)`:
+`main.cpp` demonstrates a full encrypt/decrypt round-trip:
 
-- Keys and messages are represented as polynomials
-- Each message bit `b_i` is encoded as `0` or `q/2` in a polynomial coefficient
-- Encryption produces two ciphertexts:
-  - `c₁(x) = a(x)·r(x) + e₁(x)`
-  - `c₂(x) = b(x)·r(x) + e₂(x) + m(x)`
+```cpp
+Dimension n = 256;
+Modulus q = 7681;
+BitVector msg = {1,0,1,1,0,1,0,0,1,1,0,0,1,0,1,0,1,1,1,1,0,0,0,1};
 
-Decryption recovers the message via:
-
+Key s          = private_key_gen(n, q);
+PublicKey pub  = public_key_gen(s, n, q);
+CipherText ct  = encode(pub, msg, n, q);
+Polynomial pt  = decode(s, ct, n, q);
 ```
-m(x) + noise = c₂(x) - s(x)·c₁(x)
+
+Expected output:
+```
+Original: 101101001100101011110001
+Decoded:  101101001100101011110001
+
+Match: PASS
 ```
 
-### Advantages
+---
 
-- **Compact:** one message maps to one polynomial
-- **Fast:** supports efficient polynomial arithmetic (e.g., NTT)
-- **Secure:** Ring-LWE hardness reduces to approximate-SIVP
+## How It Works
 
-Ring-LWE underlies **Kyber**, a NIST post-quantum finalist.
+Key generation samples a secret polynomial `s(x)` with small coefficients. The public key is a pair `(a(x), b(x))` where `b(x) = a(x)·s(x) + e(x)` for a small noise polynomial `e(x)`, all computed mod `(xⁿ + 1, q)`.
+
+Encryption encodes each message bit as a coefficient — `0` or `⌊q/2⌋` — then masks it with fresh noise drawn from the public key. Decryption recovers the message by canceling the secret and rounding: values close to `0` decode as `0`, values close to `q/2` decode as `1`.
+
+Security rests on the hardness of distinguishing `(a, a·s + e)` from a uniform pair — believed to be intractable even for quantum adversaries.
+
+For a more detailed treatment of the underlying mathematics, see [LWE.pdf](LWE.pdf).
 
 ---
 
 ## References
 
 - Regev, O. (2005). *On Lattices, Learning with Errors, Random Linear Codes, and Cryptography*
-- Peikert, C. (2016). *A Decade of Lattice-Based Cryptography*
 - Lyubashevsky et al. (2013). *On Ideal Lattices and Learning with Errors over Rings*
-- Regev, O. (2010). *The Learning with Errors Problem (Survey)*
-- Harrigan, S. (2020). *Lattice-Based Cryptography and LWE*
-
----
-
-## Appendix A: NTRU Protocol
-
-### Key Generation
-
-- Work in the polynomial ring `ℤ[X] / (X^n ± 1)`
-- Choose large odd modulus `q`
-- Generate polynomials `f` and `g` with coefficients in `{-1, 0, 1}`
-- Ensure `f` is invertible mod `p` and mod `q`
-- Compute public key: `h = p · f_q · g mod q`
-
-| Key | Value |
-|-----|-------|
-| Public key | `h` |
-| Private key | `f`, `f_q`, `g` |
-
-### Encryption
-
-Messages are converted to polynomials, then encrypted and decrypted using ring arithmetic in `R_q`.
-
----
-
-## Appendix B: Ring-LWE Sampling Methods
-
-| Method | Description |
-|--------|-------------|
-| Bounded discrete Gaussian | Samples small errors from a Gaussian distribution |
-| Uniform | Samples uniformly from `ℤ_q` |
-| Ternary | Samples from `{-1, 0, 1}` |
-| Noise scaling | Sets standard deviation `σ = √q / 2` |
+- Peikert, C. (2016). *A Decade of Lattice-Based Cryptography*
